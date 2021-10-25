@@ -1,0 +1,74 @@
+#!/usr/bin/env groovy
+def projectName = currentBuild.projectName
+def version = env.BUILD_NUMBER
+def buildTag = env.BUILD_TAG
+def fileName = env.npmPack
+
+pipeline {
+  agent any
+    
+  tools {nodejs "node"}
+    
+  stages {
+        
+    stage('Git') {
+      steps {
+        git branch: 'main', credentialsId: '35afb89b-2640-474e-92fc-204043a83dde', url: 'https://github.com/kondikalla/gopal.git'
+      }
+
+    stages {
+        stage("Checkout") {
+            steps {
+                load "environmentVariables.groovy"
+                echo "${env.DEV_SCM_REPOSITORY}"
+                echo "${env.DEV_SCM_BRANCH}"
+                git(url: "${env.DEV_SCM_REPOSITORY}", branch: "${env.DEV_SCM_BRANCH}", poll: true)
+            }
+        }
+
+        stage("Build") {
+        steps {
+                echo "Building.."
+                //sh 'mvn org.codehaus.mojo:exec-maven-plugin:exec'
+               sh 'npm install'
+            }
+		}
+
+        stage('Test') {
+            steps {
+                sh './jenkins/scripts/test.sh'
+            }
+        }
+
+        stage('Deliver') {
+            steps {
+                sh './jenkins/scripts/deliver.sh'
+                input message: 'Finished using the web site? (Click "Proceed" to continue)'
+                sh './jenkins/scripts/kill.sh'
+            }
+       }
+        
+        stage('Pack artefacts'){
+            steps {
+            script {
+                def npmPack = sh(returnStdout:true, script:'npm pack').trim()
+                env.npmPack = npmPack
+            	sh "echo ${npmPack}"
+            }   
+            }
+        }
+
+    post {
+        always {
+          cleanWs() 
+          
+ 
+        }
+        
+        success{
+            
+                sh 'git commit "package.json" -m'
+       
+    
+        }
+    }
